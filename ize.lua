@@ -14,4 +14,16 @@ exit 1
 
 -- ize.lua 0.0.1d
 -- lumiknit (aasr4r4@gmail.com)
+print("Interpreter Version: " .. _VERSION)
 
+---- PARSE
+
+---- GEN
+
+---- ENTRY
+
+function main()
+  print("MAIN")
+end
+
+main()
