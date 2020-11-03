@@ -18,6 +18,98 @@ print("Interpreter Version: " .. _VERSION)
 
 ---- Util
 
+function hex2num(str)
+  local n = 0
+  local zero = string.byte("0", 1)
+  local a = string.byte("a", 1)
+  local A = string.byte("A", 1)
+  for i = 1, #str do
+    local x = string.byte(str, i)
+    if 0 <= x - zero and x - zero <= 9 then
+      n = n * 16 + (x - zero)
+    elseif 0 <= x - a and x - a < 6 then
+      n = n * 16 + 10 + (x - a)
+    elseif 0 <= x - A and x - A < 6 then
+      n = n * 16 + 10 + (x - A)
+    else
+      error("Wrong format hexnumber: " .. str)
+    end
+  end
+  return n
+end
+
+-- escape
+
+escape_table = {
+  ["\x00"] = "\\0",
+  ["\x7f"] = "\\x7f",
+  ["\x07"] = "\\a",
+  ["\x08"] = "\\b",
+  ["\x1b"] = "\\e",
+  ["\x0c"] = "\\f",
+  ["\x0a"] = "\\n",
+  ["\x0d"] = "\\r",
+  ["\x09"] = "\\t",
+  ["\x0b"] = "\\v",
+  ["\\"] = "\\\\",
+  ["'"] = "\\'",
+  ["\""] = "\\\"",
+}
+function escape_q(str)
+  local buf = ""
+  for i = 1, #str do
+    local b = string.byte(str, i)
+    local c = string.sub(str, i, i)
+    local e = escape_table[c]
+    if e then
+      buf = buf .. e
+    else
+      buf = buf .. c
+    end
+  end
+  return buf
+end
+
+unescape_table = {
+  ["0"] = "\x00",
+  ["a"] = "\x07",
+  ["b"] = "\x08",
+  ["e"] = "\x1b",
+  ["f"] = "\x0c",
+  ["n"] = "\x0a",
+  ["r"] = "\x0d",
+  ["t"] = "\x09",
+  ["v"] = "\x0b",
+}
+function unescape_q(str)
+  local buf = ""
+  local i = 1
+  while i <= #str do
+    local c = string.sub(str, i, i)
+    if c == "\\" then
+      i = i + 1
+      local b = string.byte(str, i)
+      local c = string.sub(str, i, i)
+      local t = unescape_table[c]
+      if t then
+        buf = buf .. t
+      elseif c == "x" then
+        i = i + 1
+        local h = string.sub(str, i, i + 1)
+        local d = hex2num(h)
+        buf = buf .. string.char(d)
+        i = i + 1
+      else
+        buf = buf .. c
+      end
+    else
+      buf = buf .. c
+    end
+    i = i + 1
+  end
+  return buf
+end
+
 -- pp
 function ps(src, depth)
   local ty = type(src)
@@ -107,16 +199,61 @@ function path_split(path)
 end
 
 function path_opt(path)
+  local is_absolute = (path[1] == "")
+  local parent_level = 0
   local p = {}
   local k = 1
-  local l = #path
-  if k -- EDITING
+  for _i, v in ipairs(path) do
+    if v == ".." then
+      if #p == 0 then
+        if is_absolute then
+          error("Wrong Path: " .. path_tostring(path))
+        end
+        parent_level = parent_level + 1
+      else
+        table.remove(p)
+      end
+    elseif v ~= "" and v ~= "." then
+      table.insert(p, v)
+    end
+  end
+  if is_absolute then
+    table.insert(p, 1, "")
+  else
+    for i = 1, parent_level do
+      table.insert(p, 1, "..")
+    end
+  end
+  return p
+end
+
+function path_parse(str)
+  return path_opt(path_split(str))
+end
+
+function path_tostring(path)
+  local s = ""
+  for i, v in ipairs(path) do
+    if i > 1 then
+      s = s .. "/"
+    end
+    s = s .. v
+  end
+  return s
 end
 
 function path_cd(base, rel)
+  local res = {}
+  if rel[1] ~= "" then
+    for _i, v in ipairs(base) do
+      table.insert(res, v)
+    end
+  end
+  for _i, v in ipairs(rel) do
+    table.insert(res, v)
+  end
+  return path_opt(res)
 end
-
-pp(path_parent(path_split("aade")))
 
 ---- Lua Gen
 -- The below construct flattable string
@@ -182,6 +319,59 @@ function lg_while(cond, body)
 end
 
 ---- PARSE
+
+-- Source
+function Source(filename, content)
+  if content == nil then
+    content = read_from(filename)
+    if content == nil then
+      error("Failed to read '" .. escape_q(filename) .."'")
+    end
+  end
+  return {
+    filename = filename,
+    raw = content,
+    content = content, }
+end
+
+function Location(src, line, col, p)
+  return {
+    source = src,
+    line = line,
+    col = col,
+    pos = p, }
+end
+
+function ParseState(source)
+  return {
+    source = source,
+    pos = 1,
+    line = 1,
+    col = 1,
+    saved = {}}
+end
+
+function refine_source(source)
+  -- TODO: remove comments, optimize white characters
+end
+
+function PS_pass(ps, n)
+  if n == nil then n = 1 end
+  for i = 1, n do
+    local c = string.sub(ps.raw, ps.pos, ps.pos)
+    if c == "\n" then
+      ps.line = ps.line + 1
+      ps.col = 1
+    else
+      ps.col = ps.col + 1
+    end
+    ps.pos = ps.pos + 1
+  end
+end
+
+-- TODO: WRITE PS HELPERS
+
+-- TODO: WRITE PARSER
 
 ---- GEN
 
